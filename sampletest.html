@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Graph API User in SAP</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+  </style>
+</head>
+<body>
+  <h2>Microsoft Graph API User Profile</h2>
+  <table id="userTable">
+    <thead>
+      <tr>
+        <th>Field</th>
+        <th>Value</th>
+      </tr>
+    </thead>
+    <tbody id="userData"></tbody>
+  </table>
+  <script>
+    // Paste Postman token (for testing only; insecure for production)
+    const accessToken = 'eyJ0eXAiOiJKV1QiLCJub25jZSI6ImtFTVhjd1czLWFZWTBmTmlwMGpwMVhPMGFXaXNXWmp6R1ktUGF2YlJFT3MiLCJhbGciOiJSUzI1NiIsIng1dCI6InlFVXdtWFdMMTA3Q2MtN1FaMldTYmVPYjNzUSIsImtpZCI6InlFVXdtWFdMMTA3Q2MtN1FaMldTYmVPYjNzUSJ9.eyJhdWQiOiIwMDAwMDAwMy0wMDAwLTAwMDAtYzAwMC0wMDAwMDAwMDAwMDAiLCJpc3MiOiJodHRwczovL3N0cy53aW5kb3dzLm5ldC80N2VmOGM4MS05NDI2LTQ4OWItYjU5NC0yOWQ3NzlkNzQ4MjkvIiwiaWF0IjoxNzYxMDMzODcwLCJuYmYiOjE3NjEwMzM4NzAsImV4cCI6MTc2MTAzODkyNywiYWNjdCI6MCwiYWNyIjoiMSIsImFjcnMiOlsicDEiXSwiYWlvIjoiQVpRQWEvOGFBQUFBRWo4M2ZROENiMHlWRnlVWTU4ZjU3b3kyQUhDMUkxV3c5K3djM1ZYcnpjSHM1TWtwRXlpc3hhVzlabUJaR3dMd1grRjRsZlRWUXVCU0N6am8wNjJjemZsdndZalpkUkFreU1saVN6My93NWF5d2YxR3lQZGZtQWhOcWxpUkJYVkNRam13RVR4N082QkQrNjRSWkEyaUxwK3B3a0hpeC9pSW1YSGJCZFVsUWZCVUN4aUVoNTk5NExYVHlGZnZabHZVIiwiYW1yIjpbInB3ZCIsIm1mYSJdLCJhcHBfZGlzcGxheW5hbWUiOiJTQVAgR3JhcGggQVBJIFRlc3QgQXBwIiwiYXBwaWQiOiIzMWE4OWM2YS1iYWM3LTQ2ZWEtYjRjYy1kZGY1ZWY5NjY5ZjIiLCJhcHBpZGFjciI6IjEiLCJmYW1pbHlfbmFtZSI6ImxvaCIsImdpdmVuX25hbWUiOiJhbWl0IiwiaWR0eXAiOiJ1c2VyIiwiaXBhZGRyIjoiMTA5LjkzLjE1LjI0MSIsIm5hbWUiOiJhbWl0IGxvaCIsIm9pZCI6IjM5ODljNzE2LTU4NGYtNDRlYS1iODgzLTAwNTcyZmNkMmRjZSIsInBsYXRmIjoiMyIsInB1aWQiOiIxMDAzMjAwMDVDRkE5Q0YyIiwicmgiOiIxLkFUNEFnWXp2UnlhVW0waTFsQ25YZWRkSUtRTUFBQUFBQUFBQXdBQUFBQUFBQUFESEFMMC1BQS4iLCJzY3AiOiJVc2VyLlJlYWQgVXNlci5SZWFkLkFsbCBwcm9maWxlIG9wZW5pZCBlbWFpbCIsInNpZCI6IjAwOWJkMmI5LTU2MDctZmNhNi04NzI3LWViYzJiNTJkNDNkMyIsInN1YiI6Imw4TkY1d00yWXFfQXhnOU5adm9uRXY2V2xkNEpvMjlfWjRsUThjSE5WRkUiLCJ0ZW5hbnRfcmVnaW9uX3Njb3BlIjoiQVMiLCJ0aWQiOiI0N2VmOGM4MS05NDI2LTQ4OWItYjU5NC0yOWQ3NzlkNzQ4MjkiLCJ1bmlxdWVfbmFtZSI6InN3aWZ0aW5pdGRvdGNvbUBzd2lmdGluaXQub25taWNyb3NvZnQuY29tIiwidXBuIjoic3dpZnRpbml0ZG90Y29tQHN3aWZ0aW5pdC5vbm1pY3Jvc29mdC5jb20iLCJ1dGkiOiI3LUMyUUZzUktreWpuM1JOYzNKMkFBIiwidmVyIjoiMS4wIiwid2lkcyI6WyI2MmU5MDM5NC02OWY1LTQyMzctOTE5MC0wMTIxNzcxNDVlMTAiLCJiNzlmYmY0ZC0zZWY5LTQ2ODktODE0My03NmIxOTRlODU1MDkiXSwieG1zX2FjZCI6MTc2MTAzMjQ0MiwieG1zX2FjdF9mY3QiOiI5IDMiLCJ4bXNfZnRkIjoiVG1Qc1JRRVlmSnhNQXJiSzNiR2Q1WExjYlREeEQ5bFlfM2hkby1MdXp2a0JhMjl5WldGalpXNTBjbUZzTFdSemJYTSIsInhtc19pZHJlbCI6IjIgMSIsInhtc19zdCI6eyJzdWIiOiJmQXRDQkFjVVMzNWtKVlU0Tm1yVFJHaHRYYjRyS1BPVm5qdUVmOFNzaXhrIn0sInhtc19zdWJfZmN0IjoiMiAzIiwieG1zX3RjZHQiOjE1NjY1NzAzNDYsInhtc190bnRfZmN0IjoiMyAxMCJ9.U7TqOhMWA0kHl4330cCR0gNmp7NIeYedRwQJJBW0kas8UqiKqt0SaFfHhGKQSMvq6mecVkekUE6ym41PnrTZphTSQS2vwzfL95gMde0eBVnYCztX-y6ySSkBI6UaTVH1pYfsglzoSZhBf3WTXlXcnOzRiJs8UjEZTErYFBmr2ZfEXfP0HqbqztIhlAFbQDFNb7TVXLGfDwSnG_-2xMwIMVobmxn1UR6wU-r_zllTH3EJ8S8y1ghYtv0CnOVezmTfOPGkKWbBkogL2SGlj8uObxmu8AF1s1PVT_PBN4rrs7sjqH_78DTDsLrmWB7VKYjibEjmUKs0tAzT4BUI4wk5mA';
+    fetch('https://graph.microsoft.com/v1.0/me', {
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    })
+      .then(response => response.json())
+      .then(data => {
+        const tbody = document.getElementById('userData');
+        const fields = [
+          { key: 'id', label: 'ID' },
+          { key: 'displayName', label: 'Display Name' },
+          { key: 'givenName', label: 'Given Name' },
+          { key: 'surname', label: 'Surname' },
+          { key: 'mail', label: 'Email' },
+          { key: 'businessPhones', label: 'Business Phone', format: phones => phones.join(', ') },
+          { key: 'mobilePhone', label: 'Mobile Phone' },
+          { key: 'jobTitle', label: 'Job Title' },
+          { key: 'officeLocation', label: 'Office Location' },
+          { key: 'preferredLanguage', label: 'Preferred Language' },
+          { key: 'userPrincipalName', label: 'User Principal Name' }
+        ];
+        fields.forEach(field => {
+          const value = field.format ? field.format(data[field.key]) : data[field.key] || 'N/A';
+          const row = document.createElement('tr');
+          row.innerHTML = `<td>${field.label}</td><td>${value}</td>`;
+          tbody.appendChild(row);
+        });
+      })
+      .catch(error => {
+        document.getElementById('userData').innerHTML = `<tr><td colspan="2">Error: ${error.message}</td></tr>`;
+      });
+  </script>
+</body>
+</html>
