@@ -2,118 +2,371 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MSAL SPA User Details</title>
+    <title>File Manager React - FULL WORKING w/ Vue Preview + Download/Rename</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <style>
-        table { border-collapse: collapse; width: 100%; max-width: 800px; margin-top: 20px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background-color: #f4f4f4; }
+        body { padding:20px; transition: background-color 0.3s,color 0.3s }
+        body.dark { background:#121212; color:#e0e0e0 }
+        .toolbar button { margin:2px }
+        .file-grid { margin-top:20px }
+        .file-grid table { width:100%; border-collapse:collapse }
+        .file-grid th, .file-grid td { border:1px solid #ddd; padding:8px }
+        .file-grid th { background:#f8f9fa; cursor:pointer }
+        body.dark .file-grid th { background:#1f1f1f }
+        .search-box { display:flex; gap:5px; margin-top:10px; align-items:center }
+        .icon-cell { width:30px; text-align:center }
+        .breadcrumbs { margin-bottom:10px }
+        .breadcrumbs span { cursor:pointer; color:blue }
+        .preview-modal { position:fixed; top:0; left:0; width:100%; height:100%; background:#000000aa; display:flex; justify-content:center; align-items:center; z-index:1000 }
+        .preview-content { width:80%; height:80%; background:#fff; position:relative }
+        .preview-content iframe { width:100%; height:100%; border:none }
+        .preview-close { position:absolute; top:5px; right:5px; cursor:pointer; font-size:20px }
+        body.dark .preview-content { background:#333 }
     </style>
 </head>
 <body>
-    <h1>MSAL SPA User Details Demo</h1>
-    <button id="loginBtn">Login</button>
-    <button id="getUserBtn">Get User Details</button>
-    <pre id="output"></pre>
-    <div id="userDetails"></div>
+<div id="root"></div>
 
-    <script>
-        // MSAL configuration
-		console.log(window.location.origin + window.location.pathname);
-        const msalConfig = {
-            auth: {
-                clientId: "31a89c6a-bac7-46ea-b4cc-ddf5ef9669f2",
-                authority: "https://login.microsoftonline.com/47ef8c81-9426-489b-b594-29d779d74829",
-                redirectUri: window.location.origin + window.location.pathname
-            },
-            cache: {
-                cacheLocation: "localStorage",
-                storeAuthStateInCookie: false
-            }
-        };
+<script type="text/babel">
+const { useState, useEffect, useCallback, useMemo } = React;
 
-        const msalInstance = new msal.PublicClientApplication(msalConfig);
+const msalConfig = {
+    auth: { clientId: "31a89c6a-bac7-46ea-b4cc-ddf5ef9669f2", redirectUri: window.location.origin + window.location.pathname }
+};
+const msalInstance = new msal.PublicClientApplication(msalConfig);
+const apiBase = 'http://swiftinit.net:894/api';
 
-        // User fields to display
-        const fields = [
-            { key: 'id', label: 'ID' },
-            { key: 'displayName', label: 'Display Name' },
-            { key: 'givenName', label: 'Given Name' },
-            { key: 'surname', label: 'Surname' },
-            { key: 'mail', label: 'Email' },
-            { key: 'businessPhones', label: 'Business Phone', format: phones => phones.join(', ') },
-            { key: 'mobilePhone', label: 'Mobile Phone' },
-            { key: 'jobTitle', label: 'Job Title' },
-            { key: 'officeLocation', label: 'Office Location' },
-            { key: 'preferredLanguage', label: 'Preferred Language' },
-            { key: 'userPrincipalName', label: 'User Principal Name' }
-        ];
+function FileManager() {
+    const [account, setAccount] = useState(null);
+    const [files, setFiles] = useState([]);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isDarkTheme, setIsDarkTheme] = useState(false);
+    const [sortKey, setSortKey] = useState(null);
+    const [sortAsc, setSortAsc] = useState(true);
+    const [currentFolderId, setCurrentFolderId] = useState(null);
+    const [breadcrumbs, setBreadcrumbs] = useState([]);
+    const [previewUrl, setPreviewUrl] = useState(null);
+    const [loading, setLoading] = useState(false);
 
-        // Login function
-        async function login() {
-            try {
-                const loginResponse = await msalInstance.loginPopup({ scopes: ["User.Read"] });
-                msalInstance.setActiveAccount(loginResponse.account);
-                document.getElementById("output").textContent = `Logged in as: ${loginResponse.account.username}`;
-            } catch (error) {
-                console.error(error);
-                document.getElementById("output").textContent = `Login error: ${error}`;
-            }
+    const getToken = useCallback(async () => {
+        if (!account) return null;
+        try {
+            const tokenResp = await msalInstance.acquireTokenSilent({
+                account, scopes: ['Files.ReadWrite.All','User.Read']
+            });
+            return tokenResp.accessToken;
+        } catch {
+            const tokenResp = await msalInstance.acquireTokenPopup({
+                account, scopes: ['Files.ReadWrite.All','User.Read']
+            });
+            return tokenResp.accessToken;
         }
+    }, [account]);
 
-        // Acquire token silently
-        async function getToken() {
-            const account = msalInstance.getActiveAccount();
-            if (!account) throw new Error("No active account! Please login first.");
-
-            try {
-                const tokenResponse = await msalInstance.acquireTokenSilent({
-                    account: account,
-                    scopes: ["User.Read"]
-                });
-                return tokenResponse.accessToken;
-            } catch (error) {
-                console.warn("Silent token acquisition failed, trying popup...", error);
-                const tokenResponse = await msalInstance.acquireTokenPopup({ scopes: ["User.Read"] });
-                msalInstance.setActiveAccount(tokenResponse.account);
-                return tokenResponse.accessToken;
-            }
+    const previewFile = useCallback(async (file) => {
+        if (file.folder) return;
+        try {
+            const token = await getToken();
+            if (!token) return;
+            const res = await fetch(`${apiBase}/files/${file.id}/preview`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error("Failed to create preview link");
+            const data = await res.json();
+            const previewUrl = data.getUrl || data.getUrlPreview || data.previewUrl || data.value?.url || data.value?.getUrl || null;
+            if (!previewUrl) throw new Error("Preview URL missing in response");
+            setPreviewUrl(previewUrl);
+        } catch(err) {
+            console.error(err);
+            alert("Preview failed: " + err.message);
         }
+    }, [getToken]);
 
-        // Fetch user details from Microsoft Graph
-        async function getUserDetails() {
+    const loadFiles = useCallback(async (folderId = currentFolderId) => {
+        if (!account) return;
+        setLoading(true);
+        try {
+            const token = await getToken();
+            if (!token) {
+                setLoading(false);
+                return;
+            }
+            const res = await fetch(`${apiBase}/files?parentId=${folderId || 'root'}&search=${searchQuery}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                console.error('API Error:', text);
+                setLoading(false);
+                return;
+            }
+            const data = await res.json();
+            setFiles(data.value.map(f => ({ ...f, checked: false })));
+        } catch (err) {
+            console.error(err);
+        }
+        setLoading(false);
+    }, [currentFolderId, searchQuery, getToken, account]);
+
+    const login = async () => {
+        try {
+            const resp = await msalInstance.loginPopup({ scopes: ['Files.ReadWrite.All','User.Read'] });
+            setAccount(resp.account);
+            setBreadcrumbs([{ id: null, name: 'Root' }]);
+            setCurrentFolderId(null);
+        } catch (err) { console.error('Login failed:', err); }
+    };
+
+    const logout = async () => {
+        await msalInstance.logoutPopup();
+        setAccount(null);
+        setFiles([]);
+        setBreadcrumbs([]);
+        setCurrentFolderId(null);
+    };
+
+    useEffect(() => {
+        const accounts = msalInstance.getAllAccounts();
+        if (accounts.length > 0) {
+            setAccount(accounts[0]);
+            setBreadcrumbs([{ id: null, name: 'Root' }]);
+            setCurrentFolderId(null);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (account && currentFolderId === null) loadFiles();
+    }, [account]);
+
+    const openFolder = (folder) => {
+        setCurrentFolderId(folder.id);
+        setBreadcrumbs(prev => [...prev, { id: folder.id, name: folder.name }]);
+        loadFiles(folder.id);
+    };
+
+    const navigateBreadcrumb = (index) => {
+        const crumb = breadcrumbs[index];
+        setCurrentFolderId(crumb.id);
+        setBreadcrumbs(breadcrumbs.slice(0, index + 1));
+        loadFiles(crumb.id);
+    };
+
+    const toggleTheme = () => {
+        setIsDarkTheme(!isDarkTheme);
+        document.body.classList.toggle('dark', !isDarkTheme);
+    };
+
+    const sort = (key) => {
+        if (sortKey === key) setSortAsc(!sortAsc);
+        else { setSortKey(key); setSortAsc(true); }
+    };
+
+    const sortIcon = (key) => {
+        if (sortKey !== key) return <i className="fas fa-sort"></i>;
+        return sortAsc ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>;
+    };
+
+    const toggleSelectAll = (e) => {
+        const checked = e.target.checked;
+        setFiles(files.map(f => ({ ...f, checked })));
+    };
+
+    const createFolder = async () => {
+        const name = prompt('Folder name');
+        if (!name) return;
+        try {
+            const token = await getToken();
+            if (!token) return;
+            await fetch(`${apiBase}/folder`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, parentId: currentFolderId })
+            });
+            loadFiles();
+        } catch (err) { console.error(err); }
+    };
+
+    const uploadFile = async () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
             try {
                 const token = await getToken();
-                const response = await fetch('https://graph.microsoft.com/v1.0/me', {
-                    headers: { Authorization: `Bearer ${token}` }
+                if (!token) return;
+                const formData = new FormData();
+                formData.append('file', file);
+                const parentId = currentFolderId || 'root';
+                await fetch(`${apiBase}/files/upload?parentId=${parentId}`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData
                 });
-                const user = await response.json();
+                loadFiles(parentId);
+            } catch (err) { console.error(err); }
+        };
+        input.click();
+    };
 
-                // Build HTML table
-                let html = '<table><tr><th>Field</th><th>Value</th></tr>';
-                fields.forEach(f => {
-                    let value = user[f.key];
-                    if (value === undefined || value === null) value = '';
-                    if (f.format) value = f.format(value);
-                    html += `<tr><td>${f.label}</td><td>${value}</td></tr>`;
-                });
-                html += '</table>';
-                document.getElementById('userDetails').innerHTML = html;
-            } catch (error) {
-                console.error(error);
-                document.getElementById('output').textContent = `Error fetching user: ${error}`;
-            }
+    const deleteSelected = async () => {
+        const selectedFiles = files.filter(f => f.checked).map(f => f.id);
+        if (selectedFiles.length === 0 || !confirm(`Delete ${selectedFiles.length} items?`)) return;
+        try {
+            const token = await getToken();
+            if (!token) return;
+            await fetch(`${apiBase}/files/delete-multiple`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: selectedFiles })
+            });
+            loadFiles();
+        } catch (err) { console.error(err); }
+    };
+
+    const renameFile = async () => {
+        const selectedFiles = files.filter(f => f.checked);
+        if (selectedFiles.length !== 1) return alert("Select exactly 1 file to rename");
+        const file = selectedFiles[0];
+        const newName = prompt("New name:", file.name);
+        if (!newName || newName === file.name) return;
+        try {
+            const token = await getToken();
+            await fetch(`${apiBase}/files/${file.id}/rename`, {
+                method: "POST",
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ newName })
+            });
+            loadFiles();
+        } catch (err) { console.error(err); }
+    };
+
+    const downloadFiles = async () => {
+        const selectedFiles = files.filter(f => f.checked).map(f => f.id);
+        if (selectedFiles.length === 0) return alert("No files selected");
+        try {
+            const token = await getToken();
+            const res = await fetch(`${apiBase}/files/download-multiple`, {
+                method: "POST",
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: selectedFiles })
+            });
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "files.zip";
+            a.click();
+            window.URL.revokeObjectURL(url);
+        } catch (err) { console.error(err); alert("Download failed"); }
+    };
+
+    const refresh = () => loadFiles();
+
+    const filteredFiles = useMemo(() => {
+        let list = files.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
+        if (sortKey) {
+            list.sort((a,b)=>{
+                let valA=a[sortKey], valB=b[sortKey];
+                if(sortKey==='size'){valA=valA?parseInt(valA):0; valB=valB?parseInt(valB):0;}
+                return sortAsc ? (valA>valB?1:-1) : (valA<valB?1:-1);
+            });
         }
+        return list;
+    }, [files, searchQuery, sortKey, sortAsc]);
 
-        // Event listeners
-        document.getElementById("loginBtn").addEventListener("click", login);
-        document.getElementById("getUserBtn").addEventListener("click", getUserDetails);
+    const allSelected = files.length > 0 && files.every(f => f.checked);
+    const selectedCount = files.filter(f => f.checked).length;
 
-        // Check if already logged in
-        const currentAccount = msalInstance.getActiveAccount();
-        if (currentAccount) {
-            document.getElementById("output").textContent = `Already logged in as: ${currentAccount.username}`;
-        }
-    </script>
+    return (
+        <div className="container-fluid">
+            <div className="toolbar mb-2">
+                <button className="btn btn-sm btn-primary" onClick={login} disabled={account}>Login</button>
+                {account && (
+                    <>
+                        <button className="btn btn-sm btn-danger" onClick={logout}>Logout</button>
+                        <button className="btn btn-sm btn-dark" onClick={toggleTheme}>Toggle Theme</button>
+                    </>
+                )}
+                {loading && <span className="badge bg-info ms-2">Loading...</span>}
+            </div>
+
+            {account && (
+                <>
+                    <div className="breadcrumbs mb-2">
+                        {breadcrumbs.map((crumb,index)=>(
+                            <span key={crumb.id||'root'} onClick={()=>navigateBreadcrumb(index)} className="me-2">
+                                {crumb.name}{index<breadcrumbs.length-1?' > ':''}
+                            </span>
+                        ))}
+                    </div>
+
+                    <div className="toolbar mb-2">
+                        <button className="btn btn-sm btn-success" onClick={createFolder}>New Folder</button>
+                        <button className="btn btn-sm btn-success" onClick={uploadFile}>Upload</button>
+                        <button className="btn btn-sm btn-info" onClick={downloadFiles} disabled={selectedCount===0}>Download</button>
+                        <button className="btn btn-sm btn-warning" onClick={renameFile} disabled={selectedCount!==1}>Rename</button>
+                        <button className="btn btn-sm btn-danger" onClick={deleteSelected} disabled={selectedCount===0}>Delete ({selectedCount})</button>
+                        <button className="btn btn-sm btn-primary" onClick={refresh}>Refresh</button>
+                    </div>
+
+                    <div className="search-box mb-2">
+                        <input type="text" className="form-control form-control-sm" style={{width:'200px'}} 
+                            value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder="Search..." />
+                        <button className="btn btn-sm btn-primary" onClick={()=>loadFiles()}>Search</button>
+                    </div>
+
+                    <div className="file-grid">
+                        <table className="table table-striped table-bordered">
+                            <thead>
+                                <tr>
+                                    <th><input type="checkbox" onChange={toggleSelectAll} checked={allSelected} /></th>
+                                    <th onClick={()=>sort('name')}>Name {sortIcon('name')}</th>
+                                    <th onClick={()=>sort('folder')}>Type {sortIcon('folder')}</th>
+                                    <th onClick={()=>sort('size')}>Size {sortIcon('size')}</th>
+                                    <th onClick={()=>sort('lastModifiedDateTime')}>Last Modified {sortIcon('lastModifiedDateTime')}</th>
+                                    <th>Preview</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredFiles.map(file=>(
+                                    <tr key={file.id}>
+                                        <td className="icon-cell">
+                                            <input type="checkbox" checked={file.checked} onChange={()=>setFiles(files.map(f=>f.id===file.id?{...f,checked:!f.checked}:f))}/>
+                                        </td>
+                                        <td onClick={file.folder?()=>openFolder(file):null} style={{cursor:file.folder?'pointer':'default', color:file.folder?'blue':'inherit'}}>{file.name}</td>
+                                        <td>{file.folder?'Folder':'File'}</td>
+                                        <td>{file.size||'-'}</td>
+                                        <td>{file.lastModifiedDateTime||'-'}</td>
+                                        <td>{!file.folder && <button className="btn btn-sm btn-outline-primary" onClick={()=>previewFile(file)}>Preview</button>}</td>
+                                    </tr>
+                                ))}
+                                {filteredFiles.length===0 && <tr><td colSpan="6" className="text-center">No files found</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                </>
+            )}
+
+            {previewUrl && (
+                <div className="preview-modal" onClick={()=>setPreviewUrl(null)}>
+                    <div className="preview-content" onClick={e=>e.stopPropagation()}>
+                        <span className="preview-close" onClick={()=>setPreviewUrl(null)}>&times;</span>
+                        <iframe src={previewUrl}></iframe>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<FileManager />);
+</script>
 </body>
 </html>
